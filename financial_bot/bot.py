@@ -4,7 +4,7 @@ import database as db
 import ocr_handler as ocr
 import logging
 
-TOKEN = "توکن_ربات_خودت_اینجا"
+TOKEN = "8677054038:AAEQVHc6fwxcL5X1xZHRgDW-SAHc_GzEb88"
 
 # دستور استارت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
