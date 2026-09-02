@@ -5,3 +5,5 @@ jdatetime
 matplotlib
 requests
 easyocr
+beautifulsoup4
+lxml
