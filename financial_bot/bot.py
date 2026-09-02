@@ -1,10 +1,25 @@
-import database as db
-import ocr_handler as ocr
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
+import database as db
+import ocr_handler as ocr
 
 TOKEN = os.getenv('TOKEN')
+
+# ------------- تابع برای رفع مشکل پورت (اختیاری) -------------
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_health_server():
+    port = int(os.getenv('PORT', 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    server.serve_forever()
+# ------------------------------------------------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -14,10 +29,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📸 اسکن فاکتور", callback_data='scan_bill')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "سلام! به دستیار مالی خوش اومدی. یکی از گزینه‌ها رو انتخاب کن:",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text("سلام! به دستیار مالی خوش اومدی. یکی از گزینه‌ها رو انتخاب کن:", reply_markup=reply_markup)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -26,11 +38,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == 'add_expense':
         await query.edit_message_text("مبلغ هزینه رو به تومان وارد کن (مثلاً ۲۵۰۰۰۰):")
         context.user_data['state'] = 'waiting_expense_amount'
-    
     elif query.data == 'add_income':
         await query.edit_message_text("مبلغ درآمد رو به تومان وارد کن:")
         context.user_data['state'] = 'waiting_income_amount'
-    
     elif query.data == 'report':
         user_id = update.effective_user.id
         total_income, total_expense = db.get_monthly_summary(user_id)
@@ -41,7 +51,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💸 هزینه: {total_expense:,} تومان\n"
             f"📌 مانده: {balance:,} تومان"
         )
-    
     elif query.data == 'scan_bill':
         await query.edit_message_text("لطفاً از فاکتور یا قبض خود عکس بفرست:")
         context.user_data['state'] = 'waiting_photo'
@@ -59,7 +68,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['state'] = None
         except ValueError:
             await update.message.reply_text("❌ عدد رو درست وارد کن!")
-    
     elif state == 'waiting_income_amount':
         try:
             amount = int(text.replace(',', ''))
@@ -73,7 +81,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('state') == 'waiting_photo':
         photo_file = await update.message.photo[-1].get_file()
         file_bytes = await photo_file.download_as_bytearray()
-        
         amount = ocr.extract_amount_from_image(file_bytes)
         if amount:
             db.add_transaction(update.effective_user.id, amount, "فاکتور", "تشخیص خودکار", "expense")
@@ -82,31 +89,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ نتونستم مبلغ رو تشخیص بدم. لطفاً دستی وارد کن.")
         context.user_data['state'] = None
 
+# ========== تابع اصلی main ==========
 def main():
     app = Application.builder().token(TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     
     print("ربات روشن شد...")
-    import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-
-def run_health_server():
-    port = int(os.getenv('PORT', 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthHandler)
-    server.serve_forever()
-
-# توی تابع main، قبل از app.run_polling():
-threading.Thread(target=run_health_server, daemon=True).start()
-    app.run_polling()
+    
+    # (اختیاری) برای رفع مشکل پورت در Render
+    threading.Thread(target=run_health_server, daemon=True).start()
+    
+    app.run_polling()  # <--- این خط باید با print هم‌سطح باشه
 
 if __name__ == '__main__':
     main()
+# ====================================
