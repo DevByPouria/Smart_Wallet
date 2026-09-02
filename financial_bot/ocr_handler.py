@@ -1,18 +1,20 @@
-import pytesseract
-from PIL import Image
+import easyocr
 import re
 import io
+from PIL import Image
 
-# توی سرور حتماً باید Tesseract نصب باشه (برای Render توی Requirements.txt می‌نویسیم)
+# راه‌اندازی موتور OCR یکبار برای همیشه
+reader = easyocr.Reader(['fa', 'en'], gpu=False)
+
 def extract_amount_from_image(image_bytes):
     try:
         image = Image.open(io.BytesIO(image_bytes))
-        # تبدیل به سیاه و سفید برای دقت بهتر
-        text = pytesseract.image_to_string(image, lang='fas')  # 'fas' برای فارسی
-        # پیدا کردن اعداد فارسی یا انگلیسی توی متن
+        result = reader.readtext(image, detail=0)
+        text = ' '.join(result)
+        
+        # پیدا کردن اعداد فارسی یا انگلیسی
         numbers = re.findall(r'(\d{1,3}(?:[\,\.]\d{3})*|\d+)', text)
         if numbers:
-            # آخرین عدد بزرگ رو به عنوان مبلغ در نظر می‌گیریم (معمولاً مبلغ کل)
             amount = numbers[-1].replace(',', '').replace('.', '')
             return int(amount)
         return None
