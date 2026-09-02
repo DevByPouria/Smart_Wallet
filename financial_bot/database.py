@@ -46,3 +46,13 @@ def get_monthly_summary(user_id):
             total_expense = amount or 0
     
     return total_income, total_expense
+
+def get_all_transactions(user_id):
+    conn = get_db()
+    cursor = conn.execute(
+        "SELECT amount, category, description, trans_type, date_shamsi FROM transactions WHERE user_id = ? ORDER BY timestamp DESC LIMIT 20",
+        (user_id,)
+    )
+    data = cursor.fetchall()
+    conn.close()
+    return data
